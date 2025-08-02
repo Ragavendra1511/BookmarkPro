@@ -14,18 +14,21 @@ class BookmarkManager {
     }
 
     init() {
-        this.loadBookmarksFromStorage();
-        this.initializeElements();
-        this.attachEventListeners();
-        this.renderBookmarks();
-        this.renderTagFilters();
-        
-        // Show empty state if no bookmarks
-        if (this.bookmarks.length === 0) {
-            this.initializeSampleData();
-        }
+    this.loadBookmarksFromStorage();
+
+    const initialized = localStorage.getItem('bookmarkpro_initialized');
+
+    // Only initialize sample data if there are no bookmarks AND it's not already initialized
+    if (this.bookmarks.length === 0 && !initialized) {
+        this.initializeSampleData();
+        localStorage.setItem('bookmarkpro_initialized', 'true');
     }
 
+    this.initializeElements();
+    this.attachEventListeners();
+    this.renderBookmarks();
+    this.renderTagFilters();
+}
     initializeElements() {
         // Main elements
         this.searchInput = document.getElementById('searchInput');
