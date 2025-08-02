@@ -8,15 +8,14 @@ class GoogleAuthManager {
         this.currentUser = null;
         this.accessToken = null;
         this.tokenClient = null;
-        this.initialized = false;
-        this.initPromise = this.initializeGoogleIdentity();
+        this.initializeGoogleIdentity();
     }
 
     async initializeGoogleIdentity() {
         try {
             await this.loadGISScript();
 
-            // Set up OAuth2 Token Client (this is for token acquisition)
+            // Initialize OAuth2 token client (for access token)
             this.tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: this.CLIENT_ID,
                 scope: this.SCOPES,
@@ -24,8 +23,7 @@ class GoogleAuthManager {
                 ux_mode: 'popup'
             });
 
-            this.initialized = true;
-            this.showSignedOutState(); // Initial state for UI
+            this.showSignedOutState(); // Setup initial UI
             console.log('Google Identity Services initialized successfully');
         } catch (error) {
             console.error('Error initializing Google Identity Services:', error);
@@ -33,14 +31,12 @@ class GoogleAuthManager {
         }
     }
 
-    // Load only if not already present
     loadGISScript() {
         return new Promise((resolve, reject) => {
             if (window.google && window.google.accounts) {
                 resolve();
                 return;
             }
-            // Add the script
             const script = document.createElement('script');
             script.src = 'https://accounts.google.com/gsi/client';
             script.onload = resolve;
@@ -49,7 +45,6 @@ class GoogleAuthManager {
         });
     }
 
-    // <--- OAuth2 token callback, sets accessToken and does all side-effects
     async handleTokenResponse(response) {
         if (response.error) {
             console.error('Token error:', response.error);
@@ -60,7 +55,7 @@ class GoogleAuthManager {
         this.accessToken = response.access_token;
         this.isSignedIn = true;
 
-        // Fetch userinfo (must use OAuth2 access token)
+        // Fetch user info using access token
         try {
             const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
                 headers: { 'Authorization': `Bearer ${this.accessToken}` }
@@ -74,10 +69,9 @@ class GoogleAuthManager {
             this.currentUser = { name: 'User', email: '', picture: '' };
         }
         this.showSignedInState();
-        this.loadUserBookmarks(); // Only after access token!
+        this.loadUserBookmarks();
     }
 
-    // Show UI/toggle for signed in state
     showSignedInState() {
         if (!this.currentUser) return;
         const authContainer = document.getElementById('authContainer');
@@ -98,7 +92,6 @@ class GoogleAuthManager {
         }
     }
 
-    // Show UI/toggle for signed OUT state
     showSignedOutState() {
         const authContainer = document.getElementById('authContainer');
         if (authContainer) {
@@ -117,9 +110,8 @@ class GoogleAuthManager {
         }
     }
 
-    // FedCM best-practice sign in: Always request OAuth2 access token
     signIn() {
-        // User clicks sign in - request access token for Drive etc.
+        // Always use OAuth2 token client for access
         if (this.tokenClient) {
             this.tokenClient.requestAccessToken({ prompt: 'consent' });
         } else {
@@ -146,10 +138,8 @@ class GoogleAuthManager {
         try {
             this.showNotification('Syncing bookmarks...', 'info');
             const bookmarkManager = window.bookmarkManager;
-            if (!bookmarkManager) {
-                throw new Error('Bookmark manager not found');
-            }
-            const bookmarks = bookmarkManager.bookmarks;
+            if (!bookmarkManager) throw new Error('Bookmark manager not found');
+            const bookmarks = bookmarkManager.bookmarks || [];
             await this.saveBookmarksToGoogleDrive(bookmarks);
             this.showNotification('Bookmarks synced successfully!', 'success');
         } catch (error) {
@@ -159,19 +149,35 @@ class GoogleAuthManager {
     }
 
     async saveBookmarksToGoogleDrive(bookmarks) {
-        const fileMetadata = { name: 'bookmarkpro-bookmarks.json', parents: ['appDataFolder'] };
+        const fileMetadata = {
+            name: 'bookmarkpro-bookmarks.json',
+            parents: ['appDataFolder'],
+            mimeType: 'application/json'
+        };
         const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' }));
+        form.append(
+            'metadata',
+            new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' })
+        );
+        form.append(
+            'file',
+            new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' })
+        );
         const response = await fetch(
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${this.accessToken}` },
-                body: form,
+                body: form
             }
         );
-        if (!response.ok) throw new Error('Failed to save bookmarks to Google Drive');
+
+        // Debug: Log Drive API error if upload fails
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Drive API error response:", errorText);
+            throw new Error('Failed to save bookmarks to Google Drive');
+        }
         return response.json();
     }
 
@@ -181,9 +187,7 @@ class GoogleAuthManager {
             const bookmarks = await this.loadBookmarksFromGoogleDrive();
             if (bookmarks && bookmarks.length > 0) {
                 const bookmarkManager = window.bookmarkManager;
-                if (bookmarkManager) {
-                    bookmarkManager.mergeBookmarks(bookmarks);
-                }
+                if (bookmarkManager) bookmarkManager.mergeBookmarks(bookmarks);
             }
         } catch (error) {
             console.error('Error loading user bookmarks:', error);
@@ -203,9 +207,12 @@ class GoogleAuthManager {
             const files = result.files;
             if (files && files.length > 0) {
                 const fileId = files[0].id;
-                const fileResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
-                });
+                const fileResponse = await fetch(
+                    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+                    {
+                        headers: { 'Authorization': `Bearer ${this.accessToken}` }
+                    }
+                );
                 if (fileResponse.ok) {
                     return await fileResponse.json();
                 }
@@ -228,18 +235,16 @@ class GoogleAuthManager {
             border-radius: 8px;
             color: white;
             z-index: 10000;
-            background-color: ${
-                type === 'success' ? '#10b981'
+            background-color: ${type === 'success' ? '#10b981'
                 : type === 'error' ? '#ef4444'
-                : '#3b82f6'
-            };
+                    : '#3b82f6'};
         `;
         document.body.appendChild(notification);
         setTimeout(() => notification.remove(), 3000);
     }
 }
 
-// Extension to BookmarkManager for Google integration
+// Extension to your existing BookmarkManager for Google Drive integration
 class GoogleIntegratedBookmarkManager extends BookmarkManager {
     constructor() {
         super();
@@ -273,6 +278,7 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
     }
 }
 
+// Initialize the enhanced Bookmark manager with Google Sign-In
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
