@@ -23,13 +23,9 @@ class GoogleAuthManager {
         if (!this.isSignedIn) this.showSignedOutState();
         console.log('Google Identity Services initialized successfully');
     }
-
     loadGISScript() {
         return new Promise((resolve, reject) => {
-            if (window.google && window.google.accounts) {
-                resolve();
-                return;
-            }
+            if (window.google && window.google.accounts) { resolve(); return; }
             const script = document.createElement('script');
             script.src = 'https://accounts.google.com/gsi/client';
             script.onload = resolve;
@@ -37,7 +33,6 @@ class GoogleAuthManager {
             document.head.appendChild(script);
         });
     }
-
     persistSession() {
         localStorage.setItem('accessToken', this.accessToken || '');
         localStorage.setItem('currentUser', JSON.stringify(this.currentUser || {}));
@@ -57,11 +52,8 @@ class GoogleAuthManager {
             this.loadUserBookmarks();
         }
     }
-
     async handleTokenResponse(response) {
         if (response.error) {
-            console.error('Token error:', response.error);
-            this.showNotification('Google authentication failed.', 'error');
             this.showSignedOutState();
             this.removeSession();
             return;
@@ -84,17 +76,15 @@ class GoogleAuthManager {
         this.showSignedInState();
         this.loadUserBookmarks();
     }
-
     showSignedInState() {
-        if (!this.currentUser) return;
         const authContainer = document.getElementById('authContainer');
         if (authContainer) {
             authContainer.innerHTML = `
                 <div class="user-profile">
-                    <img src="${this.currentUser.picture || ''}" alt="${this.currentUser.name || 'User'}" class="user-avatar">
+                    <img src="${this.currentUser && this.currentUser.picture || ''}" alt="${this.currentUser && this.currentUser.name || 'User'}" class="user-avatar">
                     <div class="user-info">
-                        <span class="user-name">${this.currentUser.name || 'User'}</span>
-                        <span class="user-email">${this.currentUser.email || ''}</span>
+                        <span class="user-name">${this.currentUser && this.currentUser.name || 'User'}</span>
+                        <span class="user-email">${this.currentUser && this.currentUser.email || ''}</span>
                     </div>
                     <button class="btn btn--sm btn--outline" id="signOutBtn">Sign Out</button>
                 </div>
@@ -104,17 +94,13 @@ class GoogleAuthManager {
             document.getElementById('syncBtn').onclick = () => this.syncBookmarks();
         }
     }
-
     showSignedOutState() {
         const authContainer = document.getElementById('authContainer');
         if (authContainer) {
             authContainer.innerHTML = `
                 <button class="btn btn--primary" id="signInBtn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        <!-- ...SVG icon... -->
                     </svg>
                     Sign in with Google
                 </button>
@@ -122,15 +108,10 @@ class GoogleAuthManager {
             document.getElementById('signInBtn').onclick = () => this.signIn();
         }
     }
-
     signIn() {
-        if (this.tokenClient) {
-            this.tokenClient.requestAccessToken({ prompt: 'consent' });
-        } else {
-            this.showNotification('Auth not initialized. Try again.', 'error');
-        }
+        if (this.tokenClient) this.tokenClient.requestAccessToken({ prompt: 'consent' });
+        else this.showNotification('Auth not initialized. Try again.', 'error');
     }
-
     signOut() {
         this.isSignedIn = false;
         this.currentUser = null;
@@ -143,6 +124,7 @@ class GoogleAuthManager {
         this.showNotification('Signed out successfully', 'success');
     }
 
+    // ALWAYS push current bookmarks to Drive after add/update/delete
     async syncBookmarks() {
         if (!this.isSignedIn || !this.accessToken) {
             this.showNotification('Please sign in to sync bookmarks', 'error');
@@ -150,13 +132,12 @@ class GoogleAuthManager {
         }
         try {
             this.showNotification('Syncing bookmarks...', 'info');
-            const bookmarkManager = window.bookmarkManager;
-            if (!bookmarkManager) throw new Error('Bookmark manager not found');
-            const bookmarks = bookmarkManager.bookmarks || [];
+            const bm = window.bookmarkManager;
+            if (!bm) throw new Error('Bookmark manager not found');
+            const bookmarks = bm.bookmarks || [];
             await this.saveBookmarksToGoogleDrive(bookmarks);
             this.showNotification('Bookmarks synced successfully!', 'success');
         } catch (error) {
-            console.error('Error syncing bookmarks:', error);
             this.showNotification('Failed to sync bookmarks', 'error');
         }
     }
@@ -191,28 +172,20 @@ class GoogleAuthManager {
             );
         }
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Drive API error (status " + response.status + "):", errorText);
             throw new Error('Failed to save bookmarks to Google Drive');
         }
         return response.json();
     }
-
     async loadUserBookmarks() {
         if (!this.isSignedIn || !this.accessToken) return;
         try {
             const bookmarks = await this.loadBookmarksFromGoogleDrive();
             if (bookmarks && bookmarks.length > 0) {
-                const bookmarkManager = window.bookmarkManager;
-                if (bookmarkManager) {
-                    bookmarkManager.replaceBookmarks(bookmarks); // CRITICAL: no mergeBooksmarks!
-                }
+                const bm = window.bookmarkManager;
+                if (bm) bm.replaceBookmarks(bookmarks);
             }
-        } catch (error) {
-            console.error('Error loading user bookmarks:', error);
-        }
+        } catch (error) { }
     }
-
     async loadBookmarksFromGoogleDrive() {
         try {
             const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
@@ -228,16 +201,11 @@ class GoogleAuthManager {
                     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
                     { headers: { 'Authorization': `Bearer ${this.accessToken}` } }
                 );
-                if (fileResponse.ok) {
-                    return await fileResponse.json();
-                }
+                if (fileResponse.ok) return await fileResponse.json();
             }
-        } catch (error) {
-            console.error('Error loading bookmarks from Google Drive:', error);
-        }
+        } catch (error) {}
         return null;
     }
-
     showNotification(message, type = 'info') {
         const notification = document.createElement('div');
         notification.className = `notification notification--${type}`;
@@ -285,4 +253,5 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
+
 
