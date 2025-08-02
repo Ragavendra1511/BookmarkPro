@@ -298,36 +298,6 @@ class BookmarkManager {
             return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
         }
     }
-    attachBookmarkEventListeners() {
-        this.bookmarksContainer.querySelectorAll('.bookmark-link').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.stopPropagation();
-                window.open(link.href, '_blank', 'noopener,noreferrer');
-            });
-        });
-        this.bookmarksContainer.querySelectorAll('.edit').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const id = e.target.dataset.id;
-                const bookmark = this.bookmarks.find(b => b.id === id);
-                if (bookmark) this.openEditModal(bookmark);
-            });
-        });
-        this.bookmarksContainer.querySelectorAll('.delete').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const id = e.target.dataset.id;
-                const bookmark = this.bookmarks.find(b => b.id === id);
-                if (bookmark) this.showDeleteModal(bookmark);
-            });
-        });
-        this.bookmarksContainer.querySelectorAll('.bookmark-card__tag').forEach(tag => {
-            tag.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.toggleTagFilter(e.target.dataset.tag);
-            });
-        });
-    }
 }
 
 // On DOM loaded
