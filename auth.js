@@ -17,30 +17,24 @@ class GoogleAuthManager {
     }
 
     async initializeGoogleIdentity() {
-        try {
-            // Load Google Identity Services
-            await this.loadGISScript();
-            
-            // Initialize Google Identity Services
-            google.accounts.id.initialize({
-                client_id: this.CLIENT_ID,
-                callback: this.handleCredentialResponse.bind(this)
-            });
+    try {
+        // Load Google Identity Services
+        await this.loadGISScript();
+        
+        // Initialize OAuth for Drive API access (skip Google ID for now)
+        this.tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: this.CLIENT_ID,
+            scope: this.SCOPES,
+            callback: this.handleTokenResponse.bind(this)
+        });
 
-            // Initialize OAuth for Drive API access
-            this.tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: this.CLIENT_ID,
-                scope: this.SCOPES,
-                callback: this.handleTokenResponse.bind(this)
-            });
-
-            console.log('Google Identity Services initialized successfully');
-            this.showSignedOutState();
-        } catch (error) {
-            console.error('Error initializing Google Identity Services:', error);
-            this.showSignedOutState();
-        }
+        console.log('Google Identity Services initialized successfully');
+        this.showSignedOutState();
+    } catch (error) {
+        console.error('Error initializing Google Identity Services:', error);
+        this.showSignedOutState();
     }
+}
 
     loadGISScript() {
         return new Promise((resolve, reject) => {
@@ -57,28 +51,35 @@ class GoogleAuthManager {
         });
     }
 
-    handleCredentialResponse(response) {
-        // This is called when user signs in with Google ID
-        const payload = JSON.parse(atob(response.credential.split('.')[1]));
-        this.currentUser = {
-            name: payload.name,
-            email: payload.email,
-            picture: payload.picture
-        };
-        console.log('User signed in:', this.currentUser);
+    async handleTokenResponse(response) {
+    if (response.error) {
+        console.error('Token error:', response.error);
+        return;
     }
-
-    handleTokenResponse(response) {
-        if (response.error) {
-            console.error('Token error:', response.error);
-            return;
-        }
+    
+    this.accessToken = response.access_token;
+    this.isSignedIn = true;
+    
+    // Get user info from Google API
+    try {
+        const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: {
+                'Authorization': `Bearer ${this.accessToken}`
+            }
+        });
         
-        this.accessToken = response.access_token;
-        this.isSignedIn = true;
+        if (userResponse.ok) {
+            this.currentUser = await userResponse.json();
+            this.showSignedInState();
+            this.loadUserBookmarks();
+        }
+    } catch (error) {
+        console.error('Error getting user info:', error);
+        // Still show signed in state even if we can't get user info
+        this.currentUser = { name: 'User', email: '', picture: '' };
         this.showSignedInState();
-        this.loadUserBookmarks();
     }
+}
 
     showSignedInState() {
         if (!this.currentUser) return;
@@ -126,12 +127,12 @@ class GoogleAuthManager {
         google.accounts.id.prompt((notification) => {
             if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
                 // Fallback to OAuth flow
-                this.tokenClient.requestAccessToken();
+                this.tokenClient.requestAccessToken({ prompt: 'consent' });
             }
         });
         
         // Also request access token for Drive API
-        this.tokenClient.requestAccessToken();
+        this.tokenClient.requestAccessToken({ prompt: 'consent' });
     }
 
     signOut() {
