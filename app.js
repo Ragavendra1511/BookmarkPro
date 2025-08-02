@@ -569,6 +569,6 @@ class BookmarkManager {
 }
 
 // Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new BookmarkManager();
+window.addEventListener('DOMContentLoaded', () => {
+    new BookmarkManager(); // Use the regular BookmarkManager
 });
