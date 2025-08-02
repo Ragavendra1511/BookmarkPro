@@ -3,10 +3,7 @@ class BookmarkManager {
         this.bookmarks = [];
         this.filteredBookmarks = [];
         this.currentView = 'grid';
-        this.activeFilters = {
-            search: '',
-            tags: []
-        };
+        this.activeFilters = { search: '', tags: [] };
         this.editingBookmark = null;
         this.bookmarkToDelete = null;
         this.init();
@@ -15,7 +12,6 @@ class BookmarkManager {
     init() {
         this.loadBookmarksFromStorage();
         const initialized = localStorage.getItem('bookmarkpro_initialized');
-        // Only initialize sample if both no bookmarks AND NOT already initialized
         if ((!Array.isArray(this.bookmarks) || this.bookmarks.length === 0) && !initialized) {
             this.initializeSampleData();
             localStorage.setItem('bookmarkpro_initialized', 'true');
@@ -27,7 +23,6 @@ class BookmarkManager {
     }
 
     initializeElements() {
-        // (Elements—unchanged from your post)
         this.searchInput = document.getElementById('searchInput');
         this.bookmarksContainer = document.getElementById('bookmarksContainer');
         this.emptyState = document.getElementById('emptyState');
@@ -56,13 +51,13 @@ class BookmarkManager {
     }
 
     attachEventListeners() {
-        // (Event listeners for all your elements; unchanged from before)
         this.searchInput.addEventListener('input', (e) => {
             this.activeFilters.search = e.target.value;
             this.filterBookmarks();
         });
         this.addBookmarkBtn.addEventListener('click', () => this.openAddModal());
-        this.addFirstBookmarkBtn && this.addFirstBookmarkBtn.addEventListener('click', () => this.openAddModal());
+        if (this.addFirstBookmarkBtn)
+            this.addFirstBookmarkBtn.addEventListener('click', () => this.openAddModal());
         this.closeModalBtn.addEventListener('click', () => this.closeModal());
         this.cancelBtn.addEventListener('click', () => this.closeModal());
         this.bookmarkModal.querySelector('.modal__backdrop').addEventListener('click', () => this.closeModal());
@@ -138,105 +133,6 @@ class BookmarkManager {
         }
     }
 
-    openAddModal() {
-        this.editingBookmark = null;
-        this.modalTitle.textContent = 'Add Bookmark';
-        this.saveBookmarkBtn.textContent = 'Save Bookmark';
-        this.clearForm();
-        this.showModal();
-    }
-    openEditModal(bookmark) {
-        this.editingBookmark = bookmark;
-        this.modalTitle.textContent = 'Edit Bookmark';
-        this.saveBookmarkBtn.textContent = 'Update Bookmark';
-        this.populateForm(bookmark);
-        this.showModal();
-    }
-    showModal() {
-        this.bookmarkModal.classList.remove('hidden');
-        this.urlInput.focus();
-    }
-    closeModal() {
-        this.bookmarkModal.classList.add('hidden');
-        this.clearForm();
-        this.editingBookmark = null;
-    }
-    showDeleteModal(bookmark) {
-        this.bookmarkToDelete = bookmark;
-        this.deleteModal.classList.remove('hidden');
-    }
-    closeDeleteModal() {
-        this.deleteModal.classList.add('hidden');
-        this.bookmarkToDelete = null;
-    }
-    clearForm() { this.bookmarkForm.reset(); this.clearErrors(); }
-    populateForm(bookmark) {
-        this.urlInput.value = bookmark.url;
-        this.titleInput.value = bookmark.title;
-        this.descriptionInput.value = bookmark.description || '';
-        this.tagsInput.value = bookmark.tags.join(', ');
-        this.clearErrors();
-    }
-    clearErrors() { this.urlError.textContent = ''; this.titleError.textContent = ''; }
-    clearUrlError() { this.urlError.textContent = ''; }
-    validateUrl() {
-        const url = this.urlInput.value.trim();
-        if (!url) return false;
-        try {
-            new URL(url);
-            this.clearUrlError();
-            this.fetchTitle(url);
-            return true;
-        } catch {
-            this.urlError.textContent = 'Please enter a valid URL';
-            return false;
-        }
-    }
-    async fetchTitle(url) {
-        if (!this.titleInput.value.trim()) {
-            try {
-                const urlObj = new URL(url);
-                const domain = urlObj.hostname.replace('www.', '');
-                const pathParts = urlObj.pathname.split('/').filter(p => p);
-                let title = domain;
-                if (pathParts.length > 0) {
-                    const lastPart = pathParts[pathParts.length - 1];
-                    if (lastPart && !lastPart.includes('.')) {
-                        title = lastPart.replace(/-|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    }
-                } else {
-                    title = domain.split('.')[0].replace(/\b\w/g, l => l.toUpperCase());
-                }
-                this.titleInput.value = title;
-            } catch { /* ignore */ }
-        }
-    }
-    handleFormSubmit(e) {
-        e.preventDefault();
-        const url = this.urlInput.value.trim();
-        const title = this.titleInput.value.trim();
-        const description = this.descriptionInput.value.trim();
-        const tagsInput = this.tagsInput.value.trim();
-        let isValid = true;
-        if (!url) { this.urlError.textContent = 'URL is required'; isValid = false; }
-        else if (!this.validateUrl()) { isValid = false; }
-        if (!title) { this.titleError.textContent = 'Title is required'; isValid = false; }
-        if (!isValid) return;
-        const existingBookmark = this.bookmarks.find(b =>
-            b.url === url && (!this.editingBookmark || b.id !== this.editingBookmark.id)
-        );
-        if (existingBookmark) { this.urlError.textContent = 'This URL is already bookmarked'; return; }
-        const tags = tagsInput
-            ? tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag)
-            : [];
-        const bookmarkData = { url, title, description, tags };
-        if (this.editingBookmark) {
-            this.updateBookmark(this.editingBookmark.id, bookmarkData);
-        } else {
-            this.addBookmark(bookmarkData);
-        }
-        this.closeModal();
-    }
     addBookmark(data) {
         const bookmark = {
             id: this.generateId(),
@@ -247,9 +143,9 @@ class BookmarkManager {
         this.saveBookmarksToStorage();
         this.renderBookmarks();
         this.renderTagFilters();
-        // Sync to cloud if signed in
         this.syncToCloudIfAvailable();
     }
+
     updateBookmark(id, data) {
         const index = this.bookmarks.findIndex(b => b.id === id);
         if (index !== -1) {
@@ -260,6 +156,7 @@ class BookmarkManager {
             this.syncToCloudIfAvailable();
         }
     }
+
     deleteBookmark(id) {
         this.bookmarks = this.bookmarks.filter(b => b.id !== id);
         this.saveBookmarksToStorage();
@@ -267,6 +164,7 @@ class BookmarkManager {
         this.renderTagFilters();
         this.syncToCloudIfAvailable();
     }
+
     confirmDelete() {
         if (this.bookmarkToDelete) {
             this.deleteBookmark(this.bookmarkToDelete.id);
@@ -275,14 +173,17 @@ class BookmarkManager {
     }
 
     // --- CLOUD BRIDGE ---
-    // Call this method after any add/update/delete to sync cloud file (if available)
     syncToCloudIfAvailable() {
-        if (window.bookmarkManager && window.bookmarkManager.googleAuth && window.bookmarkManager.googleAuth.isSignedIn) {
+        if (
+            window.bookmarkManager &&
+            window.bookmarkManager.googleAuth &&
+            window.bookmarkManager.googleAuth.isSignedIn
+        ) {
             window.bookmarkManager.googleAuth.syncBookmarks();
         }
     }
 
-    // --- REPLACE MODE for cloud sync (no ghost resurrections) ---
+    // --- CRUCIAL: REPLACE bookmarks with what's in Google Drive ---
     replaceBookmarks(newBookmarks) {
         this.bookmarks = Array.isArray(newBookmarks) ? newBookmarks : [];
         this.saveBookmarksToStorage();
