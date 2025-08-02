@@ -4,6 +4,8 @@ class BookmarkManager {
         this.filteredBookmarks = [];
         this.currentView = 'grid';
         this.activeFilters = { search: '', tags: [] };
+        this.currentBookmark = null;
+        this.bookmarkToDelete = null;
         this.init();
     }
 
@@ -20,6 +22,7 @@ class BookmarkManager {
         this.renderBookmarks();
         this.renderTagFilters();
     }
+
     initializeElements() {
         this.searchInput = document.getElementById('searchInput');
         this.bookmarksContainer = document.getElementById('bookmarksContainer');
@@ -47,28 +50,35 @@ class BookmarkManager {
         this.closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
         this.viewButtons = document.querySelectorAll('.view-btn');
     }
+
     attachEventListeners() {
         this.searchInput.addEventListener('input', (e) => {
             this.activeFilters.search = e.target.value;
             this.filterBookmarks();
         });
+        
         this.addBookmarkBtn.addEventListener('click', () => this.openAddModal());
         if(this.addFirstBookmarkBtn)
             this.addFirstBookmarkBtn.addEventListener('click', () => this.openAddModal());
+        
         this.closeModalBtn.addEventListener('click', () => this.closeModal());
         this.cancelBtn.addEventListener('click', () => this.closeModal());
         this.bookmarkModal.querySelector('.modal__backdrop').addEventListener('click', () => this.closeModal());
+        
         this.closeDeleteModalBtn.addEventListener('click', () => this.closeDeleteModal());
         this.cancelDeleteBtn.addEventListener('click', () => this.closeDeleteModal());
         this.deleteModal.querySelector('.modal__backdrop').addEventListener('click', () => this.closeDeleteModal());
+        
         this.confirmDeleteBtn.addEventListener('click', () => this.confirmDelete());
         this.bookmarkForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
         this.urlInput.addEventListener('blur', () => this.validateUrl());
         this.urlInput.addEventListener('input', () => this.clearUrlError());
         this.clearFiltersBtn.addEventListener('click', () => this.clearFilters());
+        
         this.viewButtons.forEach(btn => {
             btn.addEventListener('click', (e) => this.switchView(e.target.dataset.view));
         });
+        
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
@@ -96,6 +106,7 @@ class BookmarkManager {
             }
         });
     }
+
     initializeSampleData() {
         const now = new Date().toISOString();
         this.bookmarks = [
@@ -105,7 +116,11 @@ class BookmarkManager {
         ];
         this.saveBookmarksToStorage();
     }
-    generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+
+    generateId() { 
+        return Date.now().toString(36) + Math.random().toString(36).substr(2); 
+    }
+
     loadBookmarksFromStorage() {
         try {
             const stored = localStorage.getItem('bookmarkpro_bookmarks');
@@ -114,31 +129,138 @@ class BookmarkManager {
             this.bookmarks = [];
         }
     }
+
     saveBookmarksToStorage() {
         try {
             localStorage.setItem('bookmarkpro_bookmarks', JSON.stringify(this.bookmarks));
         } catch (error) { }
     }
 
-    // CRUD, Sync helpers
+    // Modal Methods
+    openAddModal() {
+        this.currentBookmark = null;
+        this.modalTitle.textContent = 'Add Bookmark';
+        this.bookmarkForm.reset();
+        this.clearErrors();
+        this.bookmarkModal.classList.remove('hidden');
+        this.urlInput.focus();
+    }
+
+    openEditModal(bookmark) {
+        this.currentBookmark = bookmark;
+        this.modalTitle.textContent = 'Edit Bookmark';
+        this.urlInput.value = bookmark.url;
+        this.titleInput.value = bookmark.title;
+        this.descriptionInput.value = bookmark.description || '';
+        this.tagsInput.value = bookmark.tags.join(', ');
+        this.clearErrors();
+        this.bookmarkModal.classList.remove('hidden');
+        this.urlInput.focus();
+    }
+
+    closeModal() {
+        this.bookmarkModal.classList.add('hidden');
+        this.clearErrors();
+        this.currentBookmark = null;
+    }
+
+    showDeleteModal(bookmark) {
+        this.bookmarkToDelete = bookmark;
+        this.deleteModal.classList.remove('hidden');
+    }
+
+    closeDeleteModal() {
+        this.deleteModal.classList.add('hidden');
+        this.bookmarkToDelete = null;
+    }
+
+    clearErrors() {
+        this.urlError.textContent = '';
+        this.titleError.textContent = '';
+    }
+
+    validateForm() {
+        let isValid = true;
+        this.clearErrors();
+        
+        if (!this.urlInput.value.trim()) {
+            this.urlError.textContent = 'URL is required';
+            isValid = false;
+        }
+        
+        if (!this.titleInput.value.trim()) {
+            this.titleError.textContent = 'Title is required';
+            isValid = false;
+        }
+        
+        return isValid;
+    }
+
+    validateUrl() {
+        const url = this.urlInput.value.trim();
+        if (url && !this.isValidUrl(url)) {
+            this.urlError.textContent = 'Please enter a valid URL';
+        }
+    }
+
+    isValidUrl(string) {
+        try {
+            new URL(string);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    clearUrlError() {
+        this.urlError.textContent = '';
+    }
+
+    handleFormSubmit(e) {
+        e.preventDefault();
+        if (this.validateForm()) {
+            const formData = {
+                url: this.urlInput.value.trim(),
+                title: this.titleInput.value.trim(),
+                description: this.descriptionInput.value.trim(),
+                tags: this.tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag)
+            };
+            
+            if (this.currentBookmark) {
+                this.updateBookmark(this.currentBookmark.id, formData);
+            } else {
+                this.addBookmark(formData);
+            }
+            
+            this.closeModal();
+        }
+    }
+
+    // CRUD Methods
     addBookmark(data) {
-        const bookmark = { id: this.generateId(), ...data, dateAdded: new Date().toISOString() };
+        const bookmark = { 
+            id: this.generateId(), 
+            ...data, 
+            dateAdded: new Date().toISOString() 
+        };
         this.bookmarks.unshift(bookmark);
         this.saveBookmarksToStorage();
         this.renderBookmarks();
         this.renderTagFilters();
         this.syncToCloudIfAvailable();
     }
+
     updateBookmark(id, data) {
-        const i = this.bookmarks.findIndex(b => b.id === id);
-        if (i !== -1) {
-            this.bookmarks[i] = { ...this.bookmarks[i], ...data };
+        const index = this.bookmarks.findIndex(b => b.id === id);
+        if (index !== -1) {
+            this.bookmarks[index] = { ...this.bookmarks[index], ...data };
             this.saveBookmarksToStorage();
             this.renderBookmarks();
             this.renderTagFilters();
             this.syncToCloudIfAvailable();
         }
     }
+
     deleteBookmark(id) {
         this.bookmarks = this.bookmarks.filter(b => b.id !== id);
         this.saveBookmarksToStorage();
@@ -146,46 +268,54 @@ class BookmarkManager {
         this.renderTagFilters();
         this.syncToCloudIfAvailable();
     }
+
     confirmDelete() {
         if (this.bookmarkToDelete) {
             this.deleteBookmark(this.bookmarkToDelete.id);
             this.closeDeleteModal();
         }
     }
+
     syncToCloudIfAvailable() {
         if (window.bookmarkManager && window.bookmarkManager.googleAuth && window.bookmarkManager.googleAuth.isSignedIn) {
             window.bookmarkManager.googleAuth.syncBookmarks();
         }
     }
 
-    // --- CORE! REPLACE bookmarks when loading from Drive, never merge!
+    // CORE! REPLACE bookmarks when loading from Drive, never merge!
     replaceBookmarks(newBookmarks) {
         this.bookmarks = Array.isArray(newBookmarks) ? newBookmarks : [];
         this.saveBookmarksToStorage();
         this.renderBookmarks();
         this.renderTagFilters();
     }
-    // ---
 
-    filterBookmarks() { /* ... unchanged ... */ let filtered = [...this.bookmarks];
-      if (this.activeFilters.search) {
-        const search = this.activeFilters.search.toLowerCase();
-        filtered = filtered.filter(bookmark =>
-          bookmark.title.toLowerCase().includes(search) ||
-          bookmark.description.toLowerCase().includes(search) ||
-          bookmark.url.toLowerCase().includes(search) ||
-          bookmark.tags.some(tag => tag.toLowerCase().includes(search))
-        );}
-      if (this.activeFilters.tags.length > 0) {
-          filtered = filtered.filter(bookmark =>
-              this.activeFilters.tags.every(tag =>
-                  bookmark.tags.includes(tag)
-              )
-          );
-      }
-      this.filteredBookmarks = filtered;
-      this.renderBookmarks();
+    // Filter and Search Methods
+    filterBookmarks() {
+        let filtered = [...this.bookmarks];
+        
+        if (this.activeFilters.search) {
+            const search = this.activeFilters.search.toLowerCase();
+            filtered = filtered.filter(bookmark =>
+                bookmark.title.toLowerCase().includes(search) ||
+                bookmark.description.toLowerCase().includes(search) ||
+                bookmark.url.toLowerCase().includes(search) ||
+                bookmark.tags.some(tag => tag.toLowerCase().includes(search))
+            );
+        }
+        
+        if (this.activeFilters.tags.length > 0) {
+            filtered = filtered.filter(bookmark =>
+                this.activeFilters.tags.every(tag =>
+                    bookmark.tags.includes(tag)
+                )
+            );
+        }
+        
+        this.filteredBookmarks = filtered;
+        this.renderBookmarks();
     }
+
     clearFilters() {
         this.activeFilters.search = '';
         this.activeFilters.tags = [];
@@ -194,6 +324,7 @@ class BookmarkManager {
         this.renderBookmarks();
         this.renderTagFilters();
     }
+
     toggleTagFilter(tag) {
         const index = this.activeFilters.tags.indexOf(tag);
         if (index > -1) {
@@ -204,6 +335,7 @@ class BookmarkManager {
         this.filterBookmarks();
         this.renderTagFilters();
     }
+
     switchView(view) {
         this.currentView = view;
         this.viewButtons.forEach(btn => {
@@ -211,6 +343,7 @@ class BookmarkManager {
         });
         this.renderBookmarks();
     }
+
     getAllTags() {
         const tags = new Set();
         this.bookmarks.forEach(bookmark => {
@@ -218,18 +351,21 @@ class BookmarkManager {
         });
         return Array.from(tags).sort();
     }
+
     renderTagFilters() {
         const tags = this.getAllTags();
         if (tags.length === 0) {
             this.tagFilters.innerHTML = '';
             return;
         }
+        
         this.tagFilters.innerHTML = tags.map(tag => `
             <button class="tag-chip ${this.activeFilters.tags.includes(tag) ? 'active' : ''}" 
                     data-tag="${tag}">
                 ${tag}
             </button>
         `).join('');
+        
         this.tagFilters.querySelectorAll('.tag-chip').forEach(chip => {
             chip.addEventListener('click', (e) => {
                 this.toggleTagFilter(e.target.dataset.tag);
@@ -241,23 +377,29 @@ class BookmarkManager {
         const bookmarksToRender = (this.activeFilters.search || this.activeFilters.tags.length > 0)
             ? this.filteredBookmarks
             : this.bookmarks;
+        
         const hasBookmarksAtAll = this.bookmarks.length > 0;
         const hasFilteredResults = bookmarksToRender.length > 0;
         const isFiltering = this.activeFilters.search || this.activeFilters.tags.length > 0;
+        
         this.emptyState.classList.toggle('hidden', hasBookmarksAtAll);
         this.noResults.classList.toggle('hidden', !isFiltering || hasFilteredResults);
         this.bookmarksContainer.classList.toggle('hidden', !hasFilteredResults);
+        
         if (!hasFilteredResults) return;
+        
         this.bookmarksContainer.className = `bookmarks-grid ${this.currentView === 'list' ? 'list-view' : ''}`;
         this.bookmarksContainer.innerHTML = bookmarksToRender.map(bookmark =>
             this.renderBookmarkCard(bookmark)
         ).join('');
     }
+
     renderBookmarkCard(bookmark) {
         const formattedDate = new Date(bookmark.dateAdded).toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric'
         });
         const favicon = this.getFaviconUrl(bookmark.url);
+        
         return `
             <div class="bookmark-card ${this.currentView === 'list' ? 'list-view' : ''}" data-id="${bookmark.id}">
                 <div class="bookmark-card__header">
@@ -289,6 +431,7 @@ class BookmarkManager {
             </div>
         `;
     }
+
     getFaviconUrl(url) {
         try {
             const domain = new URL(url).hostname;
