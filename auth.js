@@ -233,7 +233,6 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
         this.googleAuth = new GoogleAuthManager();
         window.bookmarkManager = this;
     }
-
     init() {
         super.init();
         this.addGoogleAuthContainer();
@@ -249,9 +248,6 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
         }
     }
 }
-
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
-
-
