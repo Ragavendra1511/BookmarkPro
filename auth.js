@@ -1,4 +1,4 @@
-console.log('Auth.js loaded');
+console.log('debug1 loaded');
 
 class GoogleAuthManager {
     constructor() {
@@ -251,3 +251,4 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
+
