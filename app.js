@@ -1,4 +1,3 @@
-// BookmarkPro - Bookmark Manager Application
 class BookmarkManager {
     constructor() {
         this.bookmarks = [];
@@ -9,11 +8,10 @@ class BookmarkManager {
             tags: []
         };
         this.editingBookmark = null;
-
+        this.bookmarkToDelete = null;
         this.init();
     }
 
-    // MAIN INIT LOGIC — robust against ghost/sample resurrection
     init() {
         this.loadBookmarksFromStorage();
         const initialized = localStorage.getItem('bookmarkpro_initialized');
@@ -29,14 +27,12 @@ class BookmarkManager {
     }
 
     initializeElements() {
-        // ... (unchanged, as in your post)
-        // Main elements
+        // (Elements—unchanged from your post)
         this.searchInput = document.getElementById('searchInput');
         this.bookmarksContainer = document.getElementById('bookmarksContainer');
         this.emptyState = document.getElementById('emptyState');
         this.noResults = document.getElementById('noResults');
         this.tagFilters = document.getElementById('tagFilters');
-        // Modal, form, error, buttons, view buttons — as given
         this.bookmarkModal = document.getElementById('bookmarkModal');
         this.deleteModal = document.getElementById('deleteModal');
         this.bookmarkForm = document.getElementById('bookmarkForm');
@@ -60,12 +56,13 @@ class BookmarkManager {
     }
 
     attachEventListeners() {
+        // (Event listeners for all your elements; unchanged from before)
         this.searchInput.addEventListener('input', (e) => {
             this.activeFilters.search = e.target.value;
             this.filterBookmarks();
         });
         this.addBookmarkBtn.addEventListener('click', () => this.openAddModal());
-        this.addFirstBookmarkBtn.addEventListener('click', () => this.openAddModal());
+        this.addFirstBookmarkBtn && this.addFirstBookmarkBtn.addEventListener('click', () => this.openAddModal());
         this.closeModalBtn.addEventListener('click', () => this.closeModal());
         this.cancelBtn.addEventListener('click', () => this.closeModal());
         this.bookmarkModal.querySelector('.modal__backdrop').addEventListener('click', () => this.closeModal());
@@ -148,7 +145,6 @@ class BookmarkManager {
         this.clearForm();
         this.showModal();
     }
-
     openEditModal(bookmark) {
         this.editingBookmark = bookmark;
         this.modalTitle.textContent = 'Edit Bookmark';
@@ -156,33 +152,24 @@ class BookmarkManager {
         this.populateForm(bookmark);
         this.showModal();
     }
-
     showModal() {
         this.bookmarkModal.classList.remove('hidden');
         this.urlInput.focus();
     }
-
     closeModal() {
         this.bookmarkModal.classList.add('hidden');
         this.clearForm();
         this.editingBookmark = null;
     }
-
     showDeleteModal(bookmark) {
         this.bookmarkToDelete = bookmark;
         this.deleteModal.classList.remove('hidden');
     }
-
     closeDeleteModal() {
         this.deleteModal.classList.add('hidden');
         this.bookmarkToDelete = null;
     }
-
-    clearForm() {
-        this.bookmarkForm.reset();
-        this.clearErrors();
-    }
-
+    clearForm() { this.bookmarkForm.reset(); this.clearErrors(); }
     populateForm(bookmark) {
         this.urlInput.value = bookmark.url;
         this.titleInput.value = bookmark.title;
@@ -190,16 +177,8 @@ class BookmarkManager {
         this.tagsInput.value = bookmark.tags.join(', ');
         this.clearErrors();
     }
-
-    clearErrors() {
-        this.urlError.textContent = '';
-        this.titleError.textContent = '';
-    }
-
-    clearUrlError() {
-        this.urlError.textContent = '';
-    }
-
+    clearErrors() { this.urlError.textContent = ''; this.titleError.textContent = ''; }
+    clearUrlError() { this.urlError.textContent = ''; }
     validateUrl() {
         const url = this.urlInput.value.trim();
         if (!url) return false;
@@ -213,15 +192,12 @@ class BookmarkManager {
             return false;
         }
     }
-
     async fetchTitle(url) {
-        // CORS: just a guess from the URL itself.
         if (!this.titleInput.value.trim()) {
             try {
                 const urlObj = new URL(url);
                 const domain = urlObj.hostname.replace('www.', '');
                 const pathParts = urlObj.pathname.split('/').filter(p => p);
-
                 let title = domain;
                 if (pathParts.length > 0) {
                     const lastPart = pathParts[pathParts.length - 1];
@@ -235,53 +211,32 @@ class BookmarkManager {
             } catch { /* ignore */ }
         }
     }
-
     handleFormSubmit(e) {
         e.preventDefault();
-
         const url = this.urlInput.value.trim();
         const title = this.titleInput.value.trim();
         const description = this.descriptionInput.value.trim();
         const tagsInput = this.tagsInput.value.trim();
-
         let isValid = true;
-
-        if (!url) {
-            this.urlError.textContent = 'URL is required';
-            isValid = false;
-        } else if (!this.validateUrl()) {
-            isValid = false;
-        }
-        if (!title) {
-            this.titleError.textContent = 'Title is required';
-            isValid = false;
-        }
+        if (!url) { this.urlError.textContent = 'URL is required'; isValid = false; }
+        else if (!this.validateUrl()) { isValid = false; }
+        if (!title) { this.titleError.textContent = 'Title is required'; isValid = false; }
         if (!isValid) return;
-
         const existingBookmark = this.bookmarks.find(b =>
             b.url === url && (!this.editingBookmark || b.id !== this.editingBookmark.id)
         );
-        if (existingBookmark) {
-            this.urlError.textContent = 'This URL is already bookmarked';
-            return;
-        }
-
-        // Tags
+        if (existingBookmark) { this.urlError.textContent = 'This URL is already bookmarked'; return; }
         const tags = tagsInput
             ? tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag)
             : [];
-
         const bookmarkData = { url, title, description, tags };
-
         if (this.editingBookmark) {
             this.updateBookmark(this.editingBookmark.id, bookmarkData);
         } else {
             this.addBookmark(bookmarkData);
         }
-
         this.closeModal();
     }
-
     addBookmark(data) {
         const bookmark = {
             id: this.generateId(),
@@ -292,8 +247,9 @@ class BookmarkManager {
         this.saveBookmarksToStorage();
         this.renderBookmarks();
         this.renderTagFilters();
+        // Sync to cloud if signed in
+        this.syncToCloudIfAvailable();
     }
-
     updateBookmark(id, data) {
         const index = this.bookmarks.findIndex(b => b.id === id);
         if (index !== -1) {
@@ -301,16 +257,16 @@ class BookmarkManager {
             this.saveBookmarksToStorage();
             this.renderBookmarks();
             this.renderTagFilters();
+            this.syncToCloudIfAvailable();
         }
     }
-
     deleteBookmark(id) {
         this.bookmarks = this.bookmarks.filter(b => b.id !== id);
         this.saveBookmarksToStorage();
         this.renderBookmarks();
         this.renderTagFilters();
+        this.syncToCloudIfAvailable();
     }
-
     confirmDelete() {
         if (this.bookmarkToDelete) {
             this.deleteBookmark(this.bookmarkToDelete.id);
@@ -318,28 +274,42 @@ class BookmarkManager {
         }
     }
 
-    filterBookmarks() {
-        let filtered = [...this.bookmarks];
-        if (this.activeFilters.search) {
-            const search = this.activeFilters.search.toLowerCase();
-            filtered = filtered.filter(bookmark =>
-                bookmark.title.toLowerCase().includes(search) ||
-                bookmark.description.toLowerCase().includes(search) ||
-                bookmark.url.toLowerCase().includes(search) ||
-                bookmark.tags.some(tag => tag.toLowerCase().includes(search))
-            );
+    // --- CLOUD BRIDGE ---
+    // Call this method after any add/update/delete to sync cloud file (if available)
+    syncToCloudIfAvailable() {
+        if (window.bookmarkManager && window.bookmarkManager.googleAuth && window.bookmarkManager.googleAuth.isSignedIn) {
+            window.bookmarkManager.googleAuth.syncBookmarks();
         }
-        if (this.activeFilters.tags.length > 0) {
-            filtered = filtered.filter(bookmark =>
-                this.activeFilters.tags.every(tag =>
-                    bookmark.tags.includes(tag)
-                )
-            );
-        }
-        this.filteredBookmarks = filtered;
-        this.renderBookmarks();
     }
 
+    // --- REPLACE MODE for cloud sync (no ghost resurrections) ---
+    replaceBookmarks(newBookmarks) {
+        this.bookmarks = Array.isArray(newBookmarks) ? newBookmarks : [];
+        this.saveBookmarksToStorage();
+        this.renderBookmarks();
+        this.renderTagFilters();
+    }
+    // ---
+
+    filterBookmarks() { /* ... unchanged ... */ let filtered = [...this.bookmarks];
+      if (this.activeFilters.search) {
+        const search = this.activeFilters.search.toLowerCase();
+        filtered = filtered.filter(bookmark =>
+          bookmark.title.toLowerCase().includes(search) ||
+          bookmark.description.toLowerCase().includes(search) ||
+          bookmark.url.toLowerCase().includes(search) ||
+          bookmark.tags.some(tag => tag.toLowerCase().includes(search))
+        );}
+      if (this.activeFilters.tags.length > 0) {
+          filtered = filtered.filter(bookmark =>
+              this.activeFilters.tags.every(tag =>
+                  bookmark.tags.includes(tag)
+              )
+          );
+      }
+      this.filteredBookmarks = filtered;
+      this.renderBookmarks();
+    }
     clearFilters() {
         this.activeFilters.search = '';
         this.activeFilters.tags = [];
@@ -348,7 +318,6 @@ class BookmarkManager {
         this.renderBookmarks();
         this.renderTagFilters();
     }
-
     toggleTagFilter(tag) {
         const index = this.activeFilters.tags.indexOf(tag);
         if (index > -1) {
@@ -359,7 +328,6 @@ class BookmarkManager {
         this.filterBookmarks();
         this.renderTagFilters();
     }
-
     switchView(view) {
         this.currentView = view;
         this.viewButtons.forEach(btn => {
@@ -367,7 +335,6 @@ class BookmarkManager {
         });
         this.renderBookmarks();
     }
-
     getAllTags() {
         const tags = new Set();
         this.bookmarks.forEach(bookmark => {
@@ -375,7 +342,6 @@ class BookmarkManager {
         });
         return Array.from(tags).sort();
     }
-
     renderTagFilters() {
         const tags = this.getAllTags();
         if (tags.length === 0) {
@@ -405,7 +371,6 @@ class BookmarkManager {
         this.emptyState.classList.toggle('hidden', hasBookmarksAtAll);
         this.noResults.classList.toggle('hidden', !isFiltering || hasFilteredResults);
         this.bookmarksContainer.classList.toggle('hidden', !hasFilteredResults);
-
         if (!hasFilteredResults) return;
         this.bookmarksContainer.className = `bookmarks-grid ${this.currentView === 'list' ? 'list-view' : ''}`;
         this.bookmarksContainer.innerHTML = bookmarksToRender.map(bookmark =>
@@ -413,7 +378,6 @@ class BookmarkManager {
         ).join('');
         this.attachBookmarkEventListeners();
     }
-
     renderBookmarkCard(bookmark) {
         const formattedDate = new Date(bookmark.dateAdded).toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric'
@@ -450,7 +414,6 @@ class BookmarkManager {
             </div>
         `;
     }
-
     getFaviconUrl(url) {
         try {
             const domain = new URL(url).hostname;
@@ -459,7 +422,6 @@ class BookmarkManager {
             return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
         }
     }
-
     attachBookmarkEventListeners() {
         this.bookmarksContainer.querySelectorAll('.bookmark-link').forEach(link => {
             link.addEventListener('click', (e) => {
@@ -492,7 +454,7 @@ class BookmarkManager {
     }
 }
 
-// Initialize the Bookmark manager when DOM is loaded
+// On DOM loaded
 window.addEventListener('DOMContentLoaded', () => {
-    new BookmarkManager();
+    window.bookmarkManager = new BookmarkManager();
 });
