@@ -1257,4 +1257,40 @@ select.form-control {
   .modal__header, .modal__body, .modal__footer {
     padding: var(--space-16);
   }
+
+  /* google api */
+  /* Google Auth Styles */
+  .auth-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-name {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+}
+
+.user-email {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
 }
