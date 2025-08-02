@@ -51,31 +51,52 @@ class GoogleAuthManager {
     }
 
     async handleTokenResponse(response) {
+    console.log('Token response received:', response); // Debug line
+    
     if (response.error) {
         console.error('Token error:', response.error);
         return;
     }
     
+    console.log('Access token received:', response.access_token); // Debug line
     this.accessToken = response.access_token;
     this.isSignedIn = true;
     
     // Get user info from Google API
     try {
+        console.log('Fetching user info...'); // Debug line
+        
         const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
             headers: {
                 'Authorization': `Bearer ${this.accessToken}`
             }
         });
         
+        console.log('User response status:', userResponse.status); // Debug line
+        
         if (userResponse.ok) {
             this.currentUser = await userResponse.json();
+            console.log('User info received:', this.currentUser); // Debug line
             this.showSignedInState();
             this.loadUserBookmarks();
+        } else {
+            console.error('Failed to get user info:', userResponse.status);
+            // Fallback - show signed in without user details
+            this.currentUser = { 
+                name: 'User', 
+                email: 'user@example.com', 
+                picture: '' 
+            };
+            this.showSignedInState();
         }
     } catch (error) {
         console.error('Error getting user info:', error);
         // Still show signed in state even if we can't get user info
-        this.currentUser = { name: 'User', email: '', picture: '' };
+        this.currentUser = { 
+            name: 'User', 
+            email: 'user@example.com', 
+            picture: '' 
+        };
         this.showSignedInState();
     }
 }
