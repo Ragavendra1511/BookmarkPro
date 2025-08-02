@@ -4,11 +4,10 @@ class BookmarkManager {
         this.filteredBookmarks = [];
         this.currentView = 'grid';
         this.activeFilters = { search: '', tags: [] };
-        this.editingBookmark = null;
-        this.bookmarkToDelete = null;
         this.init();
     }
 
+    // --- Setup and initialization
     init() {
         this.loadBookmarksFromStorage();
         const initialized = localStorage.getItem('bookmarkpro_initialized');
@@ -21,7 +20,6 @@ class BookmarkManager {
         this.renderBookmarks();
         this.renderTagFilters();
     }
-
     initializeElements() {
         this.searchInput = document.getElementById('searchInput');
         this.bookmarksContainer = document.getElementById('bookmarksContainer');
@@ -49,14 +47,13 @@ class BookmarkManager {
         this.closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
         this.viewButtons = document.querySelectorAll('.view-btn');
     }
-
     attachEventListeners() {
         this.searchInput.addEventListener('input', (e) => {
             this.activeFilters.search = e.target.value;
             this.filterBookmarks();
         });
         this.addBookmarkBtn.addEventListener('click', () => this.openAddModal());
-        if (this.addFirstBookmarkBtn)
+        if(this.addFirstBookmarkBtn)
             this.addFirstBookmarkBtn.addEventListener('click', () => this.openAddModal());
         this.closeModalBtn.addEventListener('click', () => this.closeModal());
         this.cancelBtn.addEventListener('click', () => this.closeModal());
@@ -78,85 +75,70 @@ class BookmarkManager {
                 this.closeDeleteModal();
             }
         });
-    }
 
-    initializeSampleData() {
-        const sampleBookmarks = [
-            {
-                id: this.generateId(),
-                title: "Raindrop.io",
-                url: "https://raindrop.io",
-                description: "All-in-one bookmark manager with tagging and search",
-                tags: ["productivity", "bookmarks", "tools"],
-                dateAdded: new Date().toISOString(),
-            },
-            {
-                id: this.generateId(),
-                title: "GitHub",
-                url: "https://github.com",
-                description: "Code hosting platform for version control and collaboration",
-                tags: ["development", "git", "coding"],
-                dateAdded: new Date().toISOString(),
-            },
-            {
-                id: this.generateId(),
-                title: "CSS Grid Guide",
-                url: "https://css-tricks.com/snippets/css/complete-guide-grid/",
-                description: "Complete guide to CSS Grid layout system",
-                tags: ["css", "web design", "frontend", "tutorial"],
-                dateAdded: new Date().toISOString(),
+        // --- EVENT DELEGATION (bulletproof Edit/Delete) ---
+        this.bookmarksContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('edit')) {
+                const id = e.target.dataset.id;
+                const bookmark = this.bookmarks.find(b => b.id === id);
+                if (bookmark) this.openEditModal(bookmark);
             }
+            else if (e.target.classList.contains('delete')) {
+                const id = e.target.dataset.id;
+                const bookmark = this.bookmarks.find(b => b.id === id);
+                if (bookmark) this.showDeleteModal(bookmark);
+            }
+            else if (e.target.classList.contains('bookmark-card__tag')) {
+                this.toggleTagFilter(e.target.dataset.tag);
+            }
+            else if (e.target.classList.contains('bookmark-link')) {
+                e.stopPropagation(); // (optional)
+            }
+        });
+    }
+    initializeSampleData() {
+        const now = new Date().toISOString();
+        this.bookmarks = [
+            { id: this.generateId(), title: "Raindrop.io", url: "https://raindrop.io", description: "All-in-one bookmark manager with tagging and search", tags: ["productivity", "bookmarks", "tools"], dateAdded: now },
+            { id: this.generateId(), title: "GitHub", url: "https://github.com", description: "Code hosting platform for version control and collaboration", tags: ["development", "git", "coding"], dateAdded: now },
+            { id: this.generateId(), title: "CSS Grid Guide", url: "https://css-tricks.com/snippets/css/complete-guide-grid/", description: "Complete guide to CSS Grid layout system", tags: ["css", "web design", "frontend", "tutorial"], dateAdded: now },
         ];
-        this.bookmarks = sampleBookmarks;
         this.saveBookmarksToStorage();
     }
-
-    generateId() {
-        return Date.now().toString(36) + Math.random().toString(36).substr(2);
-    }
-
+    generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
     loadBookmarksFromStorage() {
         try {
             const stored = localStorage.getItem('bookmarkpro_bookmarks');
             this.bookmarks = stored ? JSON.parse(stored) : [];
         } catch (error) {
-            console.error('Error loading bookmarks:', error);
             this.bookmarks = [];
         }
     }
-
     saveBookmarksToStorage() {
         try {
             localStorage.setItem('bookmarkpro_bookmarks', JSON.stringify(this.bookmarks));
-        } catch (error) {
-            console.error('Error saving bookmarks:', error);
-        }
+        } catch (error) { }
     }
 
+    // CRUD, Sync helpers
     addBookmark(data) {
-        const bookmark = {
-            id: this.generateId(),
-            ...data,
-            dateAdded: new Date().toISOString()
-        };
+        const bookmark = { id: this.generateId(), ...data, dateAdded: new Date().toISOString() };
         this.bookmarks.unshift(bookmark);
         this.saveBookmarksToStorage();
         this.renderBookmarks();
         this.renderTagFilters();
         this.syncToCloudIfAvailable();
     }
-
     updateBookmark(id, data) {
-        const index = this.bookmarks.findIndex(b => b.id === id);
-        if (index !== -1) {
-            this.bookmarks[index] = { ...this.bookmarks[index], ...data };
+        const i = this.bookmarks.findIndex(b => b.id === id);
+        if (i !== -1) {
+            this.bookmarks[i] = { ...this.bookmarks[i], ...data };
             this.saveBookmarksToStorage();
             this.renderBookmarks();
             this.renderTagFilters();
             this.syncToCloudIfAvailable();
         }
     }
-
     deleteBookmark(id) {
         this.bookmarks = this.bookmarks.filter(b => b.id !== id);
         this.saveBookmarksToStorage();
@@ -164,26 +146,19 @@ class BookmarkManager {
         this.renderTagFilters();
         this.syncToCloudIfAvailable();
     }
-
     confirmDelete() {
         if (this.bookmarkToDelete) {
             this.deleteBookmark(this.bookmarkToDelete.id);
             this.closeDeleteModal();
         }
     }
-
-    // --- CLOUD BRIDGE ---
     syncToCloudIfAvailable() {
-        if (
-            window.bookmarkManager &&
-            window.bookmarkManager.googleAuth &&
-            window.bookmarkManager.googleAuth.isSignedIn
-        ) {
+        if (window.bookmarkManager && window.bookmarkManager.googleAuth && window.bookmarkManager.googleAuth.isSignedIn) {
             window.bookmarkManager.googleAuth.syncBookmarks();
         }
     }
 
-    // --- CRUCIAL: REPLACE bookmarks with what's in Google Drive ---
+    // --- CORE! REPLACE bookmarks when loading from Drive, never merge!
     replaceBookmarks(newBookmarks) {
         this.bookmarks = Array.isArray(newBookmarks) ? newBookmarks : [];
         this.saveBookmarksToStorage();
