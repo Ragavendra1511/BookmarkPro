@@ -3,7 +3,6 @@ console.log('Auth.js loaded');
 class GoogleAuthManager {
     constructor() {
         this.CLIENT_ID = '732868914338-t6b1fiiio07mnr7smtrdp3rrhm0c7223.apps.googleusercontent.com';
-        // UPDATED SCOPE: Allows appDataFolder use!
         this.SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
         this.isSignedIn = false;
         this.currentUser = null;
@@ -14,19 +13,14 @@ class GoogleAuthManager {
 
     async initializeGoogleIdentity() {
         await this.loadGISScript();
-
         this.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: this.CLIENT_ID,
             scope: this.SCOPES,
             callback: this.handleTokenResponse.bind(this),
             ux_mode: 'popup'
         });
-
         this.restoreSession();
-
-        if (!this.isSignedIn) {
-            this.showSignedOutState();
-        }
+        if (!this.isSignedIn) this.showSignedOutState();
         console.log('Google Identity Services initialized successfully');
     }
 
@@ -44,7 +38,6 @@ class GoogleAuthManager {
         });
     }
 
-    // ---- AUTH STATE PERSIST ----
     persistSession() {
         localStorage.setItem('accessToken', this.accessToken || '');
         localStorage.setItem('currentUser', JSON.stringify(this.currentUser || {}));
@@ -64,7 +57,6 @@ class GoogleAuthManager {
             this.loadUserBookmarks();
         }
     }
-    // ----------------------------
 
     async handleTokenResponse(response) {
         if (response.error) {
@@ -175,47 +167,27 @@ class GoogleAuthManager {
             parents: ['appDataFolder'],
             mimeType: 'application/json'
         };
-        // 1. Check if file exists
         const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
         const listResp = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder`,
-            {
-                headers: { 'Authorization': `Bearer ${this.accessToken}` }
-            }
+            { headers: { 'Authorization': `Bearer ${this.accessToken}` } }
         );
         const result = await listResp.json();
         const files = result.files;
         const form = new FormData();
-        form.append(
-            'metadata',
-            new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' })
-        );
-        form.append(
-            'file',
-            new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' })
-        );
-
+        form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+        form.append('file', new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' }));
         let response;
         if (files && files.length > 0) {
-            // Update existing: PATCH
             const fileId = files[0].id;
             response = await fetch(
                 `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,
-                {
-                    method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${this.accessToken}` },
-                    body: form
-                }
+                { method: 'PATCH', headers: { 'Authorization': `Bearer ${this.accessToken}` }, body: form }
             );
         } else {
-            // Create new: POST
             response = await fetch(
                 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-                {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${this.accessToken}` },
-                    body: form
-                }
+                { method: 'POST', headers: { 'Authorization': `Bearer ${this.accessToken}` }, body: form }
             );
         }
         if (!response.ok) {
@@ -232,7 +204,9 @@ class GoogleAuthManager {
             const bookmarks = await this.loadBookmarksFromGoogleDrive();
             if (bookmarks && bookmarks.length > 0) {
                 const bookmarkManager = window.bookmarkManager;
-                if (bookmarkManager) bookmarkManager.mergeBookmarks(bookmarks);
+                if (bookmarkManager) {
+                    bookmarkManager.replaceBookmarks(bookmarks); // CRITICAL: no mergeBooksmarks!
+                }
             }
         } catch (error) {
             console.error('Error loading user bookmarks:', error);
@@ -244,9 +218,7 @@ class GoogleAuthManager {
             const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
             const response = await fetch(
                 `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder`,
-                {
-                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
-                }
+                { headers: { 'Authorization': `Bearer ${this.accessToken}` } }
             );
             const result = await response.json();
             const files = result.files;
@@ -254,9 +226,7 @@ class GoogleAuthManager {
                 const fileId = files[0].id;
                 const fileResponse = await fetch(
                     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-                    {
-                        headers: { 'Authorization': `Bearer ${this.accessToken}` }
-                    }
+                    { headers: { 'Authorization': `Bearer ${this.accessToken}` } }
                 );
                 if (fileResponse.ok) {
                     return await fileResponse.json();
@@ -280,15 +250,14 @@ class GoogleAuthManager {
             border-radius: 8px;
             color: white;
             z-index: 10000;
-            background-color: ${type === 'success' ? '#10b981'
-                : type === 'error' ? '#ef4444'
-                    : '#3b82f6'};
+            background-color: ${
+                type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'
+            };
         `;
         document.body.appendChild(notification);
         setTimeout(() => notification.remove(), 3000);
     }
 }
-
 // --- BookmarkManager extension ---
 class GoogleIntegratedBookmarkManager extends BookmarkManager {
     constructor() {
@@ -296,17 +265,7 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
         this.googleAuth = new GoogleAuthManager();
         window.bookmarkManager = this;
     }
-    mergeBookmarks(cloudBookmarks) {
-        const localBookmarkUrls = new Set(this.bookmarks.map(b => b.url));
-        const newBookmarks = cloudBookmarks.filter(bookmark => !localBookmarkUrls.has(bookmark.url));
-        if (newBookmarks.length > 0) {
-            this.bookmarks = [...newBookmarks, ...this.bookmarks];
-            this.saveBookmarksToStorage();
-            this.renderBookmarks();
-            this.renderTagFilters();
-            this.googleAuth.showNotification(`Merged ${newBookmarks.length} bookmarks from cloud`, 'success');
-        }
-    }
+
     init() {
         super.init();
         this.addGoogleAuthContainer();
@@ -326,3 +285,4 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
+
