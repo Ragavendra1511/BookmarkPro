@@ -3,19 +3,18 @@ console.log('Auth.js loaded');
 class GoogleAuthManager {
     constructor() {
         this.CLIENT_ID = '732868914338-t6b1fiiio07mnr7smtrdp3rrhm0c7223.apps.googleusercontent.com';
-        this.SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        // UPDATED SCOPE: Allows appDataFolder use!
+        this.SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
         this.isSignedIn = false;
         this.currentUser = null;
         this.accessToken = null;
         this.tokenClient = null;
-        this.initDone = false;
         this.initializeGoogleIdentity();
     }
 
     async initializeGoogleIdentity() {
         await this.loadGISScript();
 
-        // Initialize OAuth2 token client
         this.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: this.CLIENT_ID,
             scope: this.SCOPES,
@@ -23,9 +22,8 @@ class GoogleAuthManager {
             ux_mode: 'popup'
         });
 
-        this.restoreSession(); // Try restoring persisted login
+        this.restoreSession();
 
-        this.initDone = true;
         if (!this.isSignedIn) {
             this.showSignedOutState();
         }
@@ -46,7 +44,7 @@ class GoogleAuthManager {
         });
     }
 
-    // --- AUTH STATE PERSISTENCE ---
+    // ---- AUTH STATE PERSIST ----
     persistSession() {
         localStorage.setItem('accessToken', this.accessToken || '');
         localStorage.setItem('currentUser', JSON.stringify(this.currentUser || {}));
@@ -66,9 +64,8 @@ class GoogleAuthManager {
             this.loadUserBookmarks();
         }
     }
-    // ---
+    // ----------------------------
 
-    // Gets called on successful access token acquisition
     async handleTokenResponse(response) {
         if (response.error) {
             console.error('Token error:', response.error);
@@ -79,8 +76,6 @@ class GoogleAuthManager {
         }
         this.accessToken = response.access_token;
         this.isSignedIn = true;
-
-        // Fetch user info using the access token
         try {
             const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
                 headers: { 'Authorization': `Bearer ${this.accessToken}` }
@@ -174,14 +169,13 @@ class GoogleAuthManager {
         }
     }
 
-    // Avoid "file already exists" by searching for existing file and using PATCH/POST accordingly
     async saveBookmarksToGoogleDrive(bookmarks) {
         const fileMetadata = {
             name: 'bookmarkpro-bookmarks.json',
             parents: ['appDataFolder'],
             mimeType: 'application/json'
         };
-        // Find if file exists
+        // 1. Check if file exists
         const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
         const listResp = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder`,
@@ -203,7 +197,7 @@ class GoogleAuthManager {
 
         let response;
         if (files && files.length > 0) {
-            // PATCH to update
+            // Update existing: PATCH
             const fileId = files[0].id;
             response = await fetch(
                 `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,
@@ -214,7 +208,7 @@ class GoogleAuthManager {
                 }
             );
         } else {
-            // POST to create
+            // Create new: POST
             response = await fetch(
                 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
                 {
