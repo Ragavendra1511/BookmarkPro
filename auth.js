@@ -8,27 +8,28 @@ class GoogleAuthManager {
         this.currentUser = null;
         this.accessToken = null;
         this.tokenClient = null;
+        this.initDone = false;
         this.initializeGoogleIdentity();
     }
 
     async initializeGoogleIdentity() {
-        try {
-            await this.loadGISScript();
+        await this.loadGISScript();
 
-            // Initialize OAuth2 token client (for access token)
-            this.tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: this.CLIENT_ID,
-                scope: this.SCOPES,
-                callback: this.handleTokenResponse.bind(this),
-                ux_mode: 'popup'
-            });
+        // Initialize OAuth2 token client
+        this.tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: this.CLIENT_ID,
+            scope: this.SCOPES,
+            callback: this.handleTokenResponse.bind(this),
+            ux_mode: 'popup'
+        });
 
-            this.showSignedOutState(); // Setup initial UI
-            console.log('Google Identity Services initialized successfully');
-        } catch (error) {
-            console.error('Error initializing Google Identity Services:', error);
+        this.restoreSession(); // Try restoring persisted login
+
+        this.initDone = true;
+        if (!this.isSignedIn) {
             this.showSignedOutState();
         }
+        console.log('Google Identity Services initialized successfully');
     }
 
     loadGISScript() {
@@ -45,17 +46,41 @@ class GoogleAuthManager {
         });
     }
 
+    // --- AUTH STATE PERSISTENCE ---
+    persistSession() {
+        localStorage.setItem('accessToken', this.accessToken || '');
+        localStorage.setItem('currentUser', JSON.stringify(this.currentUser || {}));
+    }
+    removeSession() {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('currentUser');
+    }
+    restoreSession() {
+        const storedToken = localStorage.getItem('accessToken');
+        const storedUser = localStorage.getItem('currentUser');
+        if (storedToken && storedUser) {
+            this.accessToken = storedToken;
+            this.currentUser = JSON.parse(storedUser);
+            this.isSignedIn = true;
+            this.showSignedInState();
+            this.loadUserBookmarks();
+        }
+    }
+    // ---
+
+    // Gets called on successful access token acquisition
     async handleTokenResponse(response) {
         if (response.error) {
             console.error('Token error:', response.error);
             this.showNotification('Google authentication failed.', 'error');
             this.showSignedOutState();
+            this.removeSession();
             return;
         }
         this.accessToken = response.access_token;
         this.isSignedIn = true;
 
-        // Fetch user info using access token
+        // Fetch user info using the access token
         try {
             const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
                 headers: { 'Authorization': `Bearer ${this.accessToken}` }
@@ -68,6 +93,7 @@ class GoogleAuthManager {
         } catch (e) {
             this.currentUser = { name: 'User', email: '', picture: '' };
         }
+        this.persistSession();
         this.showSignedInState();
         this.loadUserBookmarks();
     }
@@ -111,7 +137,6 @@ class GoogleAuthManager {
     }
 
     signIn() {
-        // Always use OAuth2 token client for access
         if (this.tokenClient) {
             this.tokenClient.requestAccessToken({ prompt: 'consent' });
         } else {
@@ -126,6 +151,7 @@ class GoogleAuthManager {
         if (window.google && window.google.accounts && window.google.accounts.id) {
             google.accounts.id.disableAutoSelect();
         }
+        this.removeSession();
         this.showSignedOutState();
         this.showNotification('Signed out successfully', 'success');
     }
@@ -148,12 +174,23 @@ class GoogleAuthManager {
         }
     }
 
+    // Avoid "file already exists" by searching for existing file and using PATCH/POST accordingly
     async saveBookmarksToGoogleDrive(bookmarks) {
         const fileMetadata = {
             name: 'bookmarkpro-bookmarks.json',
             parents: ['appDataFolder'],
             mimeType: 'application/json'
         };
+        // Find if file exists
+        const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
+        const listResp = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder`,
+            {
+                headers: { 'Authorization': `Bearer ${this.accessToken}` }
+            }
+        );
+        const result = await listResp.json();
+        const files = result.files;
         const form = new FormData();
         form.append(
             'metadata',
@@ -163,19 +200,33 @@ class GoogleAuthManager {
             'file',
             new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' })
         );
-        const response = await fetch(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-            {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${this.accessToken}` },
-                body: form
-            }
-        );
 
-        // Debug: Log Drive API error if upload fails
+        let response;
+        if (files && files.length > 0) {
+            // PATCH to update
+            const fileId = files[0].id;
+            response = await fetch(
+                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${this.accessToken}` },
+                    body: form
+                }
+            );
+        } else {
+            // POST to create
+            response = await fetch(
+                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+                {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${this.accessToken}` },
+                    body: form
+                }
+            );
+        }
         if (!response.ok) {
             const errorText = await response.text();
-            console.error("Drive API error response:", errorText);
+            console.error("Drive API error (status " + response.status + "):", errorText);
             throw new Error('Failed to save bookmarks to Google Drive');
         }
         return response.json();
@@ -244,7 +295,7 @@ class GoogleAuthManager {
     }
 }
 
-// Extension to your existing BookmarkManager for Google Drive integration
+// --- BookmarkManager extension ---
 class GoogleIntegratedBookmarkManager extends BookmarkManager {
     constructor() {
         super();
@@ -278,7 +329,6 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
     }
 }
 
-// Initialize the enhanced Bookmark manager with Google Sign-In
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
