@@ -1,8 +1,5 @@
 console.log('Auth.js loaded');
 
-// And add this in the GoogleAuthManager constructor:
-
-// Google API Authentication and Integration
 // Google API Authentication and Integration
 class GoogleAuthManager {
     constructor() {
@@ -16,15 +13,35 @@ class GoogleAuthManager {
         this.initializeGoogleIdentity();
     }
 
-        async initializeGoogleIdentity() {
+    async initializeGoogleIdentity() {
         try {
             await this.loadGISScript();
             
+            // Initialize One-Tap prompt with FedCM opt-in
+            google.accounts.id.initialize({
+                client_id: this.CLIENT_ID,
+                callback: this.handleTokenResponse.bind(this),
+                use_fedcm_for_prompt: true
+            });
+
+            // Render the Sign-in button with FedCM opt-in
+            google.accounts.id.renderButton(
+                document.getElementById('authContainer'),
+                {
+                    type: 'standard',
+                    theme: 'outline',
+                    size: 'large',
+                    use_fedcm_for_button: true,
+                    button_auto_select: false
+                }
+            );
+
+            // Initialize OAuth2 token client
             this.tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: this.CLIENT_ID,
                 scope: this.SCOPES,
                 callback: this.handleTokenResponse.bind(this),
-                ux_mode: 'popup' // Add this line
+                ux_mode: 'popup'
             });
 
             console.log('Google Identity Services initialized successfully');
@@ -37,7 +54,7 @@ class GoogleAuthManager {
 
     loadGISScript() {
         return new Promise((resolve, reject) => {
-            if (window.google) {
+            if (window.google && window.google.accounts) {
                 resolve();
                 return;
             }
@@ -51,34 +68,33 @@ class GoogleAuthManager {
     }
 
     async handleTokenResponse(response) {
-    if (response.error) {
-        console.error('Token error:', response.error);
-        return;
-    }
-    
-    this.accessToken = response.access_token;
-    this.isSignedIn = true;
-    
-    // Get user info from Google API
-    try {
-        const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: {
-                'Authorization': `Bearer ${this.accessToken}`
-            }
-        });
-        
-        if (userResponse.ok) {
-            this.currentUser = await userResponse.json();
-            this.showSignedInState();
-            this.loadUserBookmarks();
+        if (response.error) {
+            console.error('Token error:', response.error);
+            return;
         }
-    } catch (error) {
-        console.error('Error getting user info:', error);
-        // Still show signed in state even if we can't get user info
-        this.currentUser = { name: 'User', email: '', picture: '' };
-        this.showSignedInState();
+        
+        this.accessToken = response.access_token;
+        this.isSignedIn = true;
+        
+        // Get user info from Google API
+        try {
+            const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: {
+                    'Authorization': `Bearer ${this.accessToken}`
+                }
+            });
+            
+            if (userResponse.ok) {
+                this.currentUser = await userResponse.json();
+                this.showSignedInState();
+                this.loadUserBookmarks();
+            }
+        } catch (error) {
+            console.error('Error getting user info:', error);
+            this.currentUser = { name: 'User', email: '', picture: '' };
+            this.showSignedInState();
+        }
     }
-}
 
     showSignedInState() {
         if (!this.currentUser) return;
@@ -97,8 +113,10 @@ class GoogleAuthManager {
                 <button class="btn btn--sm btn--primary" id="syncBtn">Sync Bookmarks</button>
             `;
 
-            document.getElementById('signOutBtn').addEventListener('click', () => this.signOut());
-            document.getElementById('syncBtn').addEventListener('click', () => this.syncBookmarks());
+            document.getElementById('signOutBtn')
+                .addEventListener('click', () => this.signOut());
+            document.getElementById('syncBtn')
+                .addEventListener('click', () => this.syncBookmarks());
         }
     }
 
@@ -117,20 +135,15 @@ class GoogleAuthManager {
                 </button>
             `;
 
-            document.getElementById('signInBtn').addEventListener('click', () => this.signIn());
+            document.getElementById('signInBtn')
+                .addEventListener('click', () => this.signIn());
         }
     }
 
     signIn() {
-        // First get ID token, then get access token
-        google.accounts.id.prompt((notification) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                // Fallback to OAuth flow
-                this.tokenClient.requestAccessToken({ prompt: 'consent' });
-            }
-        });
-        
-        // Also request access token for Drive API
+        // Trigger One-Tap prompt (FedCM)
+        google.accounts.id.prompt();
+        // Also request OAuth2 access token for Drive API
         this.tokenClient.requestAccessToken({ prompt: 'consent' });
     }
 
