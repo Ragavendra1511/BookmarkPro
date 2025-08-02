@@ -16,25 +16,24 @@ class GoogleAuthManager {
         this.initializeGoogleIdentity();
     }
 
-    async initializeGoogleIdentity() {
-    try {
-        // Load Google Identity Services
-        await this.loadGISScript();
-        
-        // Initialize OAuth for Drive API access (skip Google ID for now)
-        this.tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: this.CLIENT_ID,
-            scope: this.SCOPES,
-            callback: this.handleTokenResponse.bind(this)
-        });
+        async initializeGoogleIdentity() {
+        try {
+            await this.loadGISScript();
+            
+            this.tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: this.CLIENT_ID,
+                scope: this.SCOPES,
+                callback: this.handleTokenResponse.bind(this),
+                ux_mode: 'popup' // Add this line
+            });
 
-        console.log('Google Identity Services initialized successfully');
-        this.showSignedOutState();
-    } catch (error) {
-        console.error('Error initializing Google Identity Services:', error);
-        this.showSignedOutState();
+            console.log('Google Identity Services initialized successfully');
+            this.showSignedOutState();
+        } catch (error) {
+            console.error('Error initializing Google Identity Services:', error);
+            this.showSignedOutState();
+        }
     }
-}
 
     loadGISScript() {
         return new Promise((resolve, reject) => {
