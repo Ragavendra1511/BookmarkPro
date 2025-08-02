@@ -252,7 +252,6 @@ class BookmarkManager {
         this.bookmarksContainer.innerHTML = bookmarksToRender.map(bookmark =>
             this.renderBookmarkCard(bookmark)
         ).join('');
-        this.attachBookmarkEventListeners();
     }
     renderBookmarkCard(bookmark) {
         const formattedDate = new Date(bookmark.dateAdded).toLocaleDateString('en-US', {
