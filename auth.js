@@ -1,9 +1,9 @@
-console.log('debug4 loaded');
+console.log('debug5 loaded');
 
 class GoogleAuthManager {
     constructor() {
         this.CLIENT_ID = '732868914338-t6b1fiiio07mnr7smtrdp3rrhm0c7223.apps.googleusercontent.com';
-        this.SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+        this.SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
         this.isSignedIn = false;
         this.currentUser = null;
         this.accessToken = null;
@@ -147,9 +147,14 @@ class GoogleAuthManager {
         }
     }
     signIn() {
-        if (this.tokenClient) this.tokenClient.requestAccessToken({ prompt: 'consent' });
-        else this.showNotification('Auth not initialized. Try again.', 'error');
+    if (this.tokenClient) {
+        this.tokenClient.requestAccessToken({ 
+            prompt: 'consent' // This forces re-consent with new scopes
+        });
+    } else {
+        this.showNotification('Auth not initialized. Try again.', 'error');
     }
+}
     signOut() {
         this.isSignedIn = false;
         this.currentUser = null;
@@ -320,4 +325,3 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
-
