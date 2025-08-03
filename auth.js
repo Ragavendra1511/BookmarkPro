@@ -52,6 +52,44 @@ class GoogleAuthManager {
             this.loadUserBookmarks();
         }
     }
+    async refreshTokenIfNeeded() {
+    if (!this.accessToken) {
+        throw new Error('No access token available');
+    }
+    
+    // Test if current token is valid
+    try {
+        const testResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { 'Authorization': `Bearer ${this.accessToken}` }
+        });
+        
+        if (testResponse.ok) {
+            return; // Token is still valid
+        }
+    } catch (error) {
+        // Token test failed
+    }
+    
+    // Token is invalid, request a new one
+    return new Promise((resolve, reject) => {
+        if (this.tokenClient) {
+            this.tokenClient.requestAccessToken({
+                prompt: '',
+                callback: (response) => {
+                    if (response.error) {
+                        reject(new Error('Failed to refresh token'));
+                    } else {
+                        this.accessToken = response.access_token;
+                        this.persistSession();
+                        resolve();
+                    }
+                }
+            });
+        } else {
+            reject(new Error('Token client not available'));
+        }
+    });
+}
     async handleTokenResponse(response) {
         if (response.error) {
             this.showSignedOutState();
@@ -126,66 +164,97 @@ class GoogleAuthManager {
 
     // ALWAYS push current bookmarks to Drive after add/update/delete
     async syncBookmarks() {
-        if (!this.isSignedIn || !this.accessToken) {
-            this.showNotification('Please sign in to sync bookmarks', 'error');
-            return;
-        }
-        try {
-            this.showNotification('Syncing bookmarks...', 'info');
-            const bm = window.bookmarkManager;
-            if (!bm) throw new Error('Bookmark manager not found');
-            const bookmarks = bm.bookmarks || [];
-            await this.saveBookmarksToGoogleDrive(bookmarks);
-            this.showNotification('Bookmarks synced successfully!', 'success');
-        } catch (error) {
+    if (!this.isSignedIn) {
+        this.showNotification('Please sign in to sync bookmarks', 'error');
+        return;
+    }
+    
+    try {
+        this.showNotification('Syncing bookmarks...', 'info');
+        
+        // Refresh token if needed
+        await this.refreshTokenIfNeeded();
+        
+        const bm = window.bookmarkManager;
+        if (!bm) throw new Error('Bookmark manager not found');
+        
+        const bookmarks = bm.bookmarks || [];
+        await this.saveBookmarksToGoogleDrive(bookmarks);
+        this.showNotification('Bookmarks synced successfully!', 'success');
+    } catch (error) {
+        console.error('Sync error:', error);
+        if (error.message.includes('token') || error.message.includes('Unauthorized')) {
+            this.showNotification('Session expired. Please sign in again.', 'error');
+            this.signOut();
+        } else {
             this.showNotification('Failed to sync bookmarks', 'error');
         }
     }
-
+}
     async saveBookmarksToGoogleDrive(bookmarks) {
-        const fileMetadata = {
-            name: 'bookmarkpro-bookmarks.json',
-            parents: ['appDataFolder'],
-            mimeType: 'application/json'
-        };
-        const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
-        const listResp = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder`,
-            { headers: { 'Authorization': `Bearer ${this.accessToken}` } }
+    // Ensure we have a valid token
+    await this.refreshTokenIfNeeded();
+    
+    const fileMetadata = {
+        name: 'bookmarkpro-bookmarks.json',
+        parents: ['appDataFolder'],
+        mimeType: 'application/json'
+    };
+    
+    const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
+    const listResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder`,
+        { headers: { 'Authorization': `Bearer ${this.accessToken}` } }
+    );
+    
+    if (!listResp.ok) {
+        throw new Error(`Failed to list files: ${listResp.status} ${listResp.statusText}`);
+    }
+    
+    const result = await listResp.json();
+    const files = result.files;
+    
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+    form.append('file', new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' }));
+    
+    let response;
+    if (files && files.length > 0) {
+        const fileId = files[0].id;
+        response = await fetch(
+            `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,
+            { method: 'PATCH', headers: { 'Authorization': `Bearer ${this.accessToken}` }, body: form }
         );
-        const result = await listResp.json();
-        const files = result.files;
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' }));
-        let response;
-        if (files && files.length > 0) {
-            const fileId = files[0].id;
-            response = await fetch(
-                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,
-                { method: 'PATCH', headers: { 'Authorization': `Bearer ${this.accessToken}` }, body: form }
-            );
-        } else {
-            response = await fetch(
-                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-                { method: 'POST', headers: { 'Authorization': `Bearer ${this.accessToken}` }, body: form }
-            );
-        }
-        if (!response.ok) {
-            throw new Error('Failed to save bookmarks to Google Drive');
-        }
-        return response.json();
+    } else {
+        response = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+            { method: 'POST', headers: { 'Authorization': `Bearer ${this.accessToken}` }, body: form }
+        );
     }
+    
+    if (!response.ok) {
+        throw new Error(`Failed to save bookmarks: ${response.status} ${response.statusText}`);
+    }
+    
+    return response.json();
+}
     async loadUserBookmarks() {
-        if (!this.isSignedIn || !this.accessToken) return;
-        try {
-            const bookmarks = await this.loadBookmarksFromGoogleDrive();
-            if (bookmarks && bookmarks.length > 0) {
-                const bm = window.bookmarkManager;
-                if (bm) bm.replaceBookmarks(bookmarks);
-            }
-        } catch (error) { }
+    if (!this.isSignedIn || !this.accessToken) return;
+    
+    try {
+        await this.refreshTokenIfNeeded();
+        const bookmarks = await this.loadBookmarksFromGoogleDrive();
+        if (bookmarks && bookmarks.length > 0) {
+            const bm = window.bookmarkManager;
+            if (bm) bm.replaceBookmarks(bookmarks);
+        }
+    } catch (error) {
+        console.error('Load bookmarks error:', error);
+        if (error.message.includes('token') || error.message.includes('Unauthorized')) {
+            this.signOut();
+        }
     }
+}
     async loadBookmarksFromGoogleDrive() {
         try {
             const q = encodeURIComponent("name='bookmarkpro-bookmarks.json' and parents in 'appDataFolder'");
@@ -251,6 +320,3 @@ class GoogleIntegratedBookmarkManager extends BookmarkManager {
 document.addEventListener('DOMContentLoaded', () => {
     new GoogleIntegratedBookmarkManager();
 });
-
-
-
